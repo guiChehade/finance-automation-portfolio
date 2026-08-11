@@ -3,6 +3,8 @@
 Three concise, interactive case studies by Guilherme Chehade at the
 intersection of FP&A, finance data, systems and automation.
 
+**Live portfolio:** https://finance-automation-portfolio.vercel.app
+
 ## Cases
 
 1. **P&L Performance Dashboard** - multi-dimensional P&L, scenario comparison
@@ -11,6 +13,12 @@ intersection of FP&A, finance data, systems and automation.
    forecast changes and audit trail.
 3. **Finance Data Control Tower** - source-system integration, automated
    pipelines, reconciliation and data-quality controls.
+
+Direct links:
+
+- https://finance-automation-portfolio.vercel.app/cases/pnl-performance-dashboard
+- https://finance-automation-portfolio.vercel.app/cases/forecast-planning-workspace
+- https://finance-automation-portfolio.vercel.app/cases/finance-data-control-tower
 
 ## Transparency
 
