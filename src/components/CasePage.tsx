@@ -70,8 +70,16 @@ export function CasePage({ item }: { item: PortfolioCase }) {
         <div className="story-grid">
           <article>
             <span className="eyebrow">The challenge</span>
-            <h2>Finance had numbers, but not a dependable workflow.</h2>
+            <h2>{item.challengeTitle}</h2>
             <p>{item.problem}</p>
+            <div className="challenge-signals">
+              <h3>Operational symptoms</h3>
+              <ul>{item.challengeSignals.map((signal) => <li key={signal}>{signal}</li>)}</ul>
+            </div>
+            <div className="decision-risk">
+              <span>Decision at risk</span>
+              <p>{item.decisionRisk}</p>
+            </div>
           </article>
           <article>
             <span className="eyebrow">What I built</span>

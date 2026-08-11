@@ -7,12 +7,12 @@ intersection of FP&A, finance data, systems and automation.
 
 ## Cases
 
-1. **P&L Performance Dashboard** - multi-dimensional P&L, scenario comparison
-   and executive management reporting.
-2. **Forecast Planning Workspace** - driver-based planning, collaborative
-   forecast changes and audit trail.
-3. **Finance Data Control Tower** - source-system integration, automated
-   pipelines, reconciliation and data-quality controls.
+1. **P&L Performance Dashboard** - multi-dimensional P&L, scenario comparison,
+   reconciled variance drivers, supporting evidence and owned follow-up actions.
+2. **Forecast Planning Workspace** - five-driver scenario modeling, connected
+   financial impact, governed review, saved rationale and version history.
+3. **Finance Data Control Tower** - source-system integration, incident
+   simulation, quality gates, record quarantine, reconciliation and field lineage.
 
 Direct links:
 

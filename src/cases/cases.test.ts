@@ -16,6 +16,14 @@ describe("public portfolio cases", () => {
     }
   });
 
+  it("explains operational symptoms and the decision risk in every case", () => {
+    for (const item of cases) {
+      expect(item.challengeTitle.length).toBeGreaterThan(20);
+      expect(item.challengeSignals.length).toBeGreaterThanOrEqual(4);
+      expect(item.decisionRisk.length).toBeGreaterThan(50);
+    }
+  });
+
   it("does not expose employer names in public case content", () => {
     const publicContent = JSON.stringify(cases);
     for (const privateName of ["Kenvue", "Monks", "Bradesco", "Stone", "LATAM"]) {
