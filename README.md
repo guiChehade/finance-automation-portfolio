@@ -1,7 +1,7 @@
 # Finance Automation Portfolio
 
-Three concise, interactive case studies by Guilherme Chehade at the
-intersection of FP&A, finance data, systems and automation.
+Five concise, interactive case studies by Guilherme Chehade at the
+intersection of FP&A, finance data, systems, automation and applied AI.
 
 **Live portfolio:** https://finance-automation-portfolio.vercel.app
 
@@ -13,12 +13,18 @@ intersection of FP&A, finance data, systems and automation.
    financial impact, governed review, saved rationale and version history.
 3. **Finance Data Control Tower** - source-system integration, incident
    simulation, quality gates, record quarantine, reconciliation and field lineage.
+4. **AI Variance Intelligence Copilot** - cited management commentary,
+   evidence gates, automated evaluation, model registry and human approval.
+5. **AI Finance Controls Agent** - risk-ranked close exceptions, read-only tool
+   calls, policy retrieval, prompt-injection defense and auditable review.
 
 Direct links:
 
 - https://finance-automation-portfolio.vercel.app/cases/pnl-performance-dashboard
 - https://finance-automation-portfolio.vercel.app/cases/forecast-planning-workspace
 - https://finance-automation-portfolio.vercel.app/cases/finance-data-control-tower
+- https://finance-automation-portfolio.vercel.app/cases/ai-variance-intelligence-copilot
+- https://finance-automation-portfolio.vercel.app/cases/ai-finance-controls-agent
 
 ## Transparency
 
@@ -30,7 +36,9 @@ code or confidential business logic is included.
 ## Stack
 
 React, TypeScript, Vite, Recharts and Lucide icons. The public demos are static,
-client-side simulations and do not connect to employer systems.
+client-side simulations and do not connect to employer systems or external AI
+models. AI responses, evaluations and agent traces are deterministic synthetic
+scenarios designed to demonstrate implementation and governance patterns.
 
 ## Local development
 

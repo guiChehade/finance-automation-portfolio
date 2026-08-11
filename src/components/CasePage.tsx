@@ -1,12 +1,14 @@
 import { useEffect } from "react";
 import { ArrowDown, ArrowLeft, ArrowRight, Code2, ExternalLink, ShieldCheck } from "lucide-react";
 import { casePath, cases, type PortfolioCase } from "../cases/cases";
-import { ForecastDemo, PipelineDemo, PnlDemo } from "./Demos";
+import { AiControlsAgentDemo, AiCopilotDemo, ForecastDemo, PipelineDemo, PnlDemo } from "./Demos";
 
 function CaseDemo({ item }: { item: PortfolioCase }) {
   if (item.theme === "pnl") return <PnlDemo />;
   if (item.theme === "forecast") return <ForecastDemo />;
-  return <PipelineDemo />;
+  if (item.theme === "pipeline") return <PipelineDemo />;
+  if (item.theme === "copilot") return <AiCopilotDemo />;
+  return <AiControlsAgentDemo />;
 }
 
 export function CasePage({ item }: { item: PortfolioCase }) {

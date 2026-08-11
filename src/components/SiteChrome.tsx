@@ -9,7 +9,7 @@ export function SiteHeader({ activeSlug }: { activeSlug?: string }) {
           <span className="identity-mark" aria-hidden="true">GC</span>
           <span className="identity-copy">
             <strong>Guilherme Chehade</strong>
-            <small>FP&amp;A · Finance Data · Automation</small>
+            <small>FP&amp;A · Finance Data · AI Automation</small>
           </span>
         </a>
 
@@ -48,7 +48,7 @@ export function SiteFooter() {
       <div className="footer-inner">
         <div>
           <strong>Guilherme Chehade</strong>
-          <p>Finance systems that make FP&amp;A faster, clearer and more auditable.</p>
+          <p>Finance and AI systems that make FP&amp;A faster, clearer and more auditable.</p>
         </div>
         <div className="footer-links">
           <a href="https://github.com/guiChehade/finance-automation-portfolio" rel="noreferrer" target="_blank">

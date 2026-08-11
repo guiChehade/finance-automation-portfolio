@@ -1,5 +1,7 @@
 import {
   ArrowRight,
+  Bot,
+  BrainCircuit,
   ChartNoAxesCombined,
   DatabaseZap,
   GitCompareArrows,
@@ -11,6 +13,8 @@ const caseIcons = {
   pnl: ChartNoAxesCombined,
   forecast: GitCompareArrows,
   pipeline: DatabaseZap,
+  copilot: BrainCircuit,
+  agent: Bot,
 };
 
 function MiniProduct({ item }: { item: PortfolioCase }) {
@@ -40,18 +44,19 @@ export function PortfolioHome() {
     <main>
       <section className="portfolio-intro page-shell">
         <div className="intro-copy">
-          <span className="eyebrow">Finance systems portfolio · 2026</span>
-          <h1>FP&amp;A workflows built as decision products.</h1>
+          <span className="eyebrow">Finance, data &amp; AI portfolio · 2026</span>
+          <h1>FP&amp;A workflows built as governed decision products.</h1>
           <p>
-            Three interactive cases showing how I connect corporate finance,
-            data engineering and automation across P&amp;L reporting, forecasting
-            and financial data pipelines.
+            Five interactive cases showing how I connect corporate finance,
+            data engineering, automation and applied AI across P&amp;L reporting,
+            forecasting, financial pipelines and controlled decision support.
           </p>
         </div>
         <div className="intro-proof" aria-label="Portfolio focus">
           <span><ShieldCheck aria-hidden="true" size={17} /> Governed financial logic</span>
           <span><DatabaseZap aria-hidden="true" size={17} /> Automated data workflows</span>
           <span><ChartNoAxesCombined aria-hidden="true" size={17} /> Decision-ready reporting</span>
+          <span><BrainCircuit aria-hidden="true" size={17} /> Governed applied AI</span>
         </div>
       </section>
 
@@ -60,7 +65,7 @@ export function PortfolioHome() {
           <div className="section-heading">
             <div>
               <span className="eyebrow">Selected work</span>
-              <h2>Three problems, one operating principle</h2>
+              <h2>Five problems, one operating principle</h2>
             </div>
             <p>Reduce manual finance work without losing control, traceability or business context.</p>
           </div>

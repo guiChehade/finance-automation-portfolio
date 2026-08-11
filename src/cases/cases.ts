@@ -23,7 +23,7 @@ export type PortfolioCase = {
   stack: string[];
   keywords: string[];
   clientTranslation: string;
-  theme: "pnl" | "forecast" | "pipeline";
+  theme: "pnl" | "forecast" | "pipeline" | "copilot" | "agent";
 };
 
 export const cases: PortfolioCase[] = [
@@ -173,6 +173,104 @@ export const cases: PortfolioCase[] = [
     clientTranslation:
       "For finance teams with fragmented systems, this pattern moves control upstream. Errors become visible before reporting, recurring extracts disappear and every management number has a traceable path back to its source.",
     theme: "pipeline",
+  },
+  {
+    number: "04",
+    slug: "ai-variance-intelligence-copilot",
+    navLabel: "AI Variance Copilot",
+    title: "AI Variance Intelligence Copilot",
+    client: "Asteron Mobility",
+    industry: "Mobility services · Global FP&A",
+    role: "Finance AI Product Lead",
+    duration: "10-week controlled pilot",
+    summary:
+      "A governed generative-AI workflow that turns reconciled P&L drivers into cited management commentary, evaluation scores and review-ready actions.",
+    challengeTitle: "Finance had the drivers, but commentary still restarted from a blank page.",
+    problem:
+      "Analysts spent the final hours of every close rewriting the same variance logic across markets and presentation formats. Generic AI experiments produced fluent text, but could not prove which financial evidence supported each claim, enforce materiality or stop when an input was stale.",
+    challengeSignals: [
+      "Forty-five entities drafted commentary with different levels of detail and terminology.",
+      "Executive narratives could drift away from the reconciled P&L and approved business input.",
+      "Reviewers had no citation trail, evaluation score or prompt and model version attached to the text.",
+      "Missing owner explanations were discovered only during the final management review.",
+    ],
+    decisionRisk:
+      "An unsupported AI-generated explanation could reach leadership, obscure the real business driver and weaken confidence in both the close and the technology.",
+    approach: [
+      "Structured reconciled variances, materiality rules and owner input as a controlled evidence package.",
+      "Generated schema-constrained commentary with claim-level citations instead of unrestricted prose.",
+      "Added automated evaluation for groundedness, citation coverage, materiality, tone and PII safety.",
+      "Required a finance reviewer to approve, reject or request evidence before any narrative could be published.",
+    ],
+    metrics: [
+      { value: "2 days → 38 min", label: "Commentary cycle", detail: "Illustrative preparation time after reconciliation" },
+      { value: "100%", label: "Cited claims", detail: "Illustrative citation coverage in approved outputs" },
+      { value: "0", label: "Unreviewed outputs", detail: "Illustrative publishing control result" },
+      { value: "45", label: "Reporting entities", detail: "Illustrative management-reporting scope" },
+    ],
+    stack: ["Python", "LLM API", "Structured Outputs", "SQL", "Embeddings", "React"],
+    keywords: [
+      "Generative AI",
+      "Retrieval-Augmented Generation (RAG)",
+      "Prompt Engineering",
+      "Structured Outputs",
+      "Human-in-the-loop",
+      "AI Evaluation",
+      "AI Guardrails & Governance",
+      "Management Commentary",
+    ],
+    clientTranslation:
+      "For FP&A teams, this pattern accelerates narrative work without asking leadership to trust an opaque model. Every claim stays connected to approved evidence, every degraded input stops publication and every final word remains owned by Finance.",
+    theme: "copilot",
+  },
+  {
+    number: "05",
+    slug: "ai-finance-controls-agent",
+    navLabel: "AI Controls Agent",
+    title: "AI Finance Controls Agent",
+    client: "Helix Harbor Commerce",
+    industry: "Digital commerce · Multi-entity close",
+    role: "Finance Automation & AI Architect",
+    duration: "12-week supervised rollout",
+    summary:
+      "An agentic close-control workflow that detects exceptions, retrieves policy and historical evidence, and proposes auditable actions without autonomous postings.",
+    challengeTitle: "The close queue was large; the evidence behind each exception was scattered.",
+    problem:
+      "Controllers reviewed hundreds of possible duplicates, accrual gaps, mapping errors and FX outliers across separate systems. Rules found volume but lacked context, while a general-purpose agent would introduce unacceptable access and execution risk inside a controlled finance process.",
+    challengeSignals: [
+      "Six hundred and forty monthly alerts competed for a limited controller review window.",
+      "Policy, ERP history and prior reviewer decisions had to be collected manually for every investigation.",
+      "False positives diluted attention from the highest-value financial-control exceptions.",
+      "Untrusted supplier documents could enter the same context used by an AI assistant.",
+    ],
+    decisionRisk:
+      "A missed exception could distort the close, while an over-permissioned agent could act on untrusted content or recommend a journal without sufficient evidence.",
+    approach: [
+      "Combined deterministic controls and anomaly signals into a risk-ranked review queue.",
+      "Limited the agent to read-only finance tools and retrieved only approved policy and reviewed history.",
+      "Exposed each tool call, evidence item, recommendation and confidence signal in an audit trace.",
+      "Blocked prompt injection and kept all accounting decisions and postings under human control.",
+    ],
+    metrics: [
+      { value: "640 → 118", label: "Review queue", detail: "Illustrative reduction after risk-based triage" },
+      { value: "82%", label: "Precision", detail: "Illustrative reviewed-exception precision" },
+      { value: "6.4 hrs", label: "Close time saved", detail: "Illustrative analyst capacity per monthly close" },
+      { value: "0", label: "Autonomous postings", detail: "Illustrative control boundary by design" },
+    ],
+    stack: ["Python", "LLM Tool Calling", "Vector Search", "SQL", "ERP APIs", "React"],
+    keywords: [
+      "Agentic AI",
+      "Function Calling",
+      "Retrieval-Augmented Generation (RAG)",
+      "Anomaly Detection",
+      "Human-in-the-loop",
+      "AI Evaluation",
+      "Audit Logs",
+      "Close Management",
+    ],
+    clientTranslation:
+      "For controllership and FP&A, this pattern uses AI to compress investigation time while preserving segregation of duties. The agent can inspect, retrieve and recommend; a qualified reviewer still decides and the ERP remains protected from autonomous changes.",
+    theme: "agent",
   },
 ];
 
