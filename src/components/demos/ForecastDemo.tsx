@@ -1,291 +1,136 @@
 import { useMemo, useState } from "react";
+import { Activity, Check, CircleDollarSign, GitCompareArrows, History, RefreshCw, Send, SlidersHorizontal, Users } from "lucide-react";
+import { Bar, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
-  Check,
-  CircleDollarSign,
-  GitCompareArrows,
-  History,
-  RefreshCw,
-  Save,
-  Sparkles,
-  Users,
-} from "lucide-react";
-import {
-  Area,
-  CartesianGrid,
-  ComposedChart,
-  Legend,
-  Line,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import {
-  calculateForecast,
+  calculateIntegratedForecast,
   forecastPresets,
   getForecastChanges,
   type ForecastDrivers,
   type ForecastPreset,
-} from "../../cases/demoModels";
-import { DemoKpi, formatMillions, ProductName, SyntheticDemoNotice } from "./DemoShared";
+} from "../../domain/portfolioModels";
+import { AuditTimeline, ConfirmDialog, type AuditEvent, useSessionState, useToast } from "../interaction/InteractionSystem";
+import { DemoKpi, DemoStatusBar, formatMillions, ProductName, StatusPill, SyntheticDemoNotice } from "./DemoShared";
 
-type WorkspaceView = "Plan" | "Activity";
+type ForecastView = "Scenario" | "Monthly plan" | "Activity";
+type Version = { id: number; scenario: string; author: string; reason: string; changes: number; ebitda: number; margin: number; time: string };
 
-type VersionEntry = {
-  id: number;
-  scenario: string;
-  author: string;
-  time: string;
-  reason: string;
-  ebitda: number;
-  changes: number;
-};
-
-const driverConfig: Array<{
-  key: keyof ForecastDrivers;
-  label: string;
-  description: string;
-  min: number;
-  max: number;
-  step: number;
-  suffix: string;
-}> = [
-  { key: "revenueGrowth", label: "Revenue growth", description: "Commercial outlook vs prior year", min: -5, max: 14, step: 0.5, suffix: "%" },
-  { key: "utilization", label: "Utilization", description: "Billable capacity across delivery teams", min: 62, max: 88, step: 1, suffix: "%" },
-  { key: "headcount", label: "Year-end headcount", description: "Employees active at year end", min: 380, max: 470, step: 1, suffix: " FTE" },
-  { key: "wageInflation", label: "Wage inflation", description: "Annualized salary movement", min: 2, max: 8, step: 0.5, suffix: "%" },
-  { key: "contractorMix", label: "Contractor mix", description: "External capacity as share of workforce", min: 5, max: 30, step: 1, suffix: "%" },
+const configs: Array<{ key: keyof ForecastDrivers; label: string; detail: string; min: number; max: number; step: number; suffix: string }> = [
+  { key: "priceGrowth", label: "Price growth", detail: "Realized commercial uplift", min: -2, max: 9, step: 0.5, suffix: "%" },
+  { key: "pipelineConversion", label: "Pipeline conversion", detail: "Weighted qualified demand", min: 20, max: 65, step: 1, suffix: "%" },
+  { key: "utilization", label: "Utilization", detail: "Billable productive capacity", min: 60, max: 88, step: 1, suffix: "%" },
+  { key: "plannedHires", label: "Planned hires", detail: "Approved Jul–Dec starts", min: 0, max: 60, step: 1, suffix: " FTE" },
+  { key: "attrition", label: "Attrition", detail: "Annualized exits", min: 3, max: 20, step: 1, suffix: "%" },
+  { key: "wageInflation", label: "Wage inflation", detail: "Annual salary movement", min: 1, max: 9, step: 0.5, suffix: "%" },
+  { key: "contractorMix", label: "Contractor mix", detail: "Flexible delivery capacity", min: 3, max: 30, step: 1, suffix: "%" },
+  { key: "discretionarySpend", label: "Discretionary spend", detail: "Remaining FY envelope", min: 1, max: 6, step: 0.1, suffix: "M" },
 ];
 
-const initialHistory: VersionEntry[] = [
-  { id: 2, scenario: "Base", author: "Regional FP&A", time: "Today, 09:18", reason: "Aligned hiring dates with approved requisitions.", ebitda: 13.7, changes: 2 },
-  { id: 1, scenario: "Base", author: "Global Planning", time: "Yesterday, 16:42", reason: "Opened the planning cycle with finance-approved assumptions.", ebitda: 13.7, changes: 5 },
+const initialVersions: Version[] = [
+  { id: 2, scenario: "Base", author: "Regional FP&A", reason: "Hiring dates reconciled with approved requisitions.", changes: 2, ebitda: 14.8, margin: 14.4, time: "Today, 09:18" },
+  { id: 1, scenario: "Base", author: "Global Planning", reason: "Planning cycle opened with approved assumptions.", changes: 8, ebitda: 14.5, margin: 14.1, time: "Yesterday, 16:42" },
 ];
 
-function findPreset(drivers: ForecastDrivers): ForecastPreset | "Custom" {
-  const match = (Object.keys(forecastPresets) as ForecastPreset[]).find((name) => (
-    (Object.keys(drivers) as Array<keyof ForecastDrivers>).every((key) => drivers[key] === forecastPresets[name][key])
-  ));
-  return match ?? "Custom";
-}
-
-function formatDriverValue(value: number, suffix: string) {
-  return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}${suffix}`;
+function driverValue(value: number, suffix: string) {
+  return `${Number.isInteger(value) ? value : value.toFixed(1)}${suffix}`;
 }
 
 export function ForecastDemo() {
-  const [view, setView] = useState<WorkspaceView>("Plan");
+  const [view, setView] = useState<ForecastView>("Scenario");
   const [scenario, setScenario] = useState<ForecastPreset | "Custom">("Base");
   const [drivers, setDrivers] = useState<ForecastDrivers>({ ...forecastPresets.Base });
-  const [savedDrivers, setSavedDrivers] = useState<ForecastDrivers>({ ...forecastPresets.Base });
+  const [savedDrivers, setSavedDrivers] = useSessionState<ForecastDrivers>("portfolio-v4-forecast-drivers", { ...forecastPresets.Base });
+  const [versions, setVersions] = useSessionState<Version[]>("portfolio-v4-forecast-versions", initialVersions);
+  const [audit, setAudit] = useSessionState<AuditEvent[]>("portfolio-v4-forecast-audit", []);
   const [reviewOpen, setReviewOpen] = useState(false);
-  const [reason, setReason] = useState("");
-  const [savedMessage, setSavedMessage] = useState("");
-  const [history, setHistory] = useState<VersionEntry[]>(initialHistory);
+  const [rationale, setRationale] = useState("");
+  const [recipients, setRecipients] = useState("Global FP&A Reviewers");
+  const { pushToast } = useToast();
 
-  const model = useMemo(() => calculateForecast(drivers), [drivers]);
-  const savedModel = useMemo(() => calculateForecast(savedDrivers), [savedDrivers]);
+  const model = useMemo(() => calculateIntegratedForecast(drivers), [drivers]);
+  const savedModel = useMemo(() => calculateIntegratedForecast(savedDrivers), [savedDrivers]);
   const changes = useMemo(() => getForecastChanges(savedDrivers, drivers), [drivers, savedDrivers]);
-  const dirty = changes.length > 0;
-  const totalEbitdaImpact = model.ebitda - savedModel.ebitda;
+  const allGuardrailsPass = model.guardrails.every((item) => item.pass);
 
   function applyPreset(next: ForecastPreset) {
     setScenario(next);
     setDrivers({ ...forecastPresets[next] });
-    setReviewOpen(false);
-    setSavedMessage("");
   }
 
-  function updateDriver(key: keyof ForecastDrivers, value: number) {
-    setDrivers((current) => ({ ...current, [key]: value }));
+  function changeDriver(key: keyof ForecastDrivers, value: number) {
     setScenario("Custom");
-    setReviewOpen(false);
-    setSavedMessage("");
+    setDrivers((current) => ({ ...current, [key]: value }));
   }
 
-  function discardDraft() {
+  function discard() {
     setDrivers({ ...savedDrivers });
-    setScenario(findPreset(savedDrivers));
-    setReviewOpen(false);
-    setReason("");
-    setSavedMessage("Draft changes discarded");
+    setScenario("Custom");
+    pushToast({ title: "Draft discarded", detail: "The last submitted assumptions were restored.", tone: "info" });
   }
 
-  function saveVersion() {
-    if (!dirty || reason.trim().length < 12) return;
-    setHistory((current) => [
-      {
-        id: Date.now(),
-        scenario,
-        author: "You",
-        time: "Just now",
-        reason: reason.trim(),
-        ebitda: model.ebitda,
-        changes: changes.length,
-      },
-      ...current,
-    ]);
+  function submitReview() {
+    if (rationale.trim().length < 12 || !recipients) return;
+    const entry: Version = { id: Date.now(), scenario, author: "You", reason: rationale.trim(), changes: changes.length, ebitda: model.totals.ebitda, margin: model.totals.margin, time: "Just now · Under review" };
+    setVersions((current) => [entry, ...current].slice(0, 8));
     setSavedDrivers({ ...drivers });
+    setAudit((current) => [{ id: entry.id, title: "Forecast submitted for review", detail: `${changes.length} driver changes routed to ${recipients}. ${allGuardrailsPass ? "All guardrails passed." : "Exceptions highlighted for reviewer decision."}`, tone: (allGuardrailsPass ? "complete" : "pending") as AuditEvent["tone"] }, ...current].slice(0, 6));
     setReviewOpen(false);
-    setReason("");
-    setSavedMessage("Version saved with rationale");
+    setRationale("");
+    pushToast({ title: "Forecast routed for review", detail: `${recipients} received version v${versions.length + 1}.` });
   }
 
   return (
     <div className="product-demo forecast-demo">
       <div className="demo-toolbar">
-        <ProductName icon={GitCompareArrows} name="Fieldstone Outlook" subtitle="Global planning workspace" />
-        <div className="demo-toolbar-controls">
-          <div className="segmented-control" aria-label="Workspace view">
-            {(["Plan", "Activity"] as WorkspaceView[]).map((option) => (
-              <button aria-pressed={view === option} className={view === option ? "active" : ""} key={option} onClick={() => setView(option)} type="button">
-                {option === "Activity" && <History aria-hidden="true" size={13} />}{option}
-              </button>
-            ))}
-          </div>
-          <SyntheticDemoNotice />
-        </div>
+        <ProductName icon={GitCompareArrows} name="Fieldstone Outlook" subtitle="Integrated forecast workspace" />
+        <div className="demo-toolbar-controls"><div className="segmented-control">{(["Scenario", "Monthly plan", "Activity"] as ForecastView[]).map((item) => <button className={view === item ? "active" : ""} key={item} onClick={() => setView(item)} type="button">{item === "Activity" && <History size={13} />}{item}</button>)}</div><SyntheticDemoNotice /></div>
       </div>
 
       <div className="demo-content">
-        <div className="workspace-status-row">
-          <div><span className={`status-dot ${dirty ? "status-dot-warning" : ""}`} /> FY26 Outlook · Global Services</div>
-          <div aria-live="polite">{savedMessage ? <><Check size={14} /> {savedMessage}</> : dirty ? `${changes.length} unsaved driver change${changes.length === 1 ? "" : "s"}` : "Current version is saved"}</div>
-        </div>
+        <DemoStatusBar records="8 connected drivers · 12 modeled months"><strong>FY26 Global Services</strong> · Actuals through June · {changes.length ? `${changes.length} draft changes` : "Submitted assumptions"}</DemoStatusBar>
 
         {view === "Activity" ? (
-          <section className="demo-panel activity-panel" role="tabpanel">
-            <div className="panel-heading"><div><span>Governance</span><h3>Forecast version history</h3></div><small>Reason, author and impact retained</small></div>
-            <div className="demo-table-scroll">
-              <table className="demo-table activity-table">
-                <thead><tr><th>Version</th><th>Scenario</th><th>Owner</th><th>Changes</th><th>EBITDA</th><th>Saved rationale</th></tr></thead>
-                <tbody>
-                  {history.map((entry, index) => (
-                    <tr key={entry.id}>
-                      <th>v{history.length - index}<small>{entry.time}</small></th>
-                      <td><span className="table-status">{entry.scenario}</span></td>
-                      <td>{entry.author}</td>
-                      <td>{entry.changes} inputs</td>
-                      <td>{formatMillions(entry.ebitda)}</td>
-                      <td>{entry.reason}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          <div className="activity-layout">
+            <section className="demo-panel"><div className="panel-heading"><div><span>Version control</span><h3>Forecast history</h3></div><small>Rationale and impact retained</small></div><div className="demo-table-scroll"><table className="demo-table"><thead><tr><th>Version</th><th>Scenario</th><th>Owner</th><th>Changes</th><th>EBITDA</th><th>Margin</th><th>Rationale</th></tr></thead><tbody>{versions.map((entry, index) => <tr key={entry.id}><th>v{versions.length - index}<small>{entry.time}</small></th><td><StatusPill label={entry.scenario} tone="info" /></td><td>{entry.author}</td><td>{entry.changes}</td><td>{formatMillions(entry.ebitda)}</td><td>{entry.margin.toFixed(1)}%</td><td>{entry.reason}</td></tr>)}</tbody></table></div></section>
+            <section className="demo-panel audit-panel"><div className="panel-heading"><div><span>Governance</span><h3>Review workflow</h3></div><small>Current session</small></div><AuditTimeline events={audit} /></section>
+          </div>
         ) : (
           <>
-            <div className="scenario-bar">
-              <div><span>Scenario presets</span><strong>{scenario} outlook</strong></div>
-              <div className="segmented-control" aria-label="Forecast scenario">
-                {(Object.keys(forecastPresets) as ForecastPreset[]).map((option) => (
-                  <button aria-pressed={scenario === option} className={scenario === option ? "active" : ""} key={option} onClick={() => applyPreset(option)} type="button">{option}</button>
-                ))}
-              </div>
-            </div>
+            <div className="scenario-bar"><div><span>Scenario presets</span><strong>{scenario} outlook</strong></div><div className="segmented-control">{(Object.keys(forecastPresets) as ForecastPreset[]).map((item) => <button className={scenario === item ? "active" : ""} key={item} onClick={() => applyPreset(item)} type="button">{item}</button>)}</div></div>
 
             <div className="demo-kpi-grid">
-              <DemoKpi detail={`${scenario} scenario`} icon={<CircleDollarSign size={17} />} label="FY net revenue" value={formatMillions(model.revenue)} />
-              <DemoKpi detail={`${totalEbitdaImpact >= 0 ? "+" : ""}${formatMillions(totalEbitdaImpact)} vs saved`} icon={<Sparkles size={17} />} label="EBITDA" tone={model.margin >= 14 ? "positive" : "warning"} value={formatMillions(model.ebitda)} />
-              <DemoKpi detail="After modeled costs" icon={<GitCompareArrows size={17} />} label="EBITDA margin" tone={model.margin >= 14 ? "positive" : "warning"} value={`${model.margin.toFixed(1)}%`} />
-              <DemoKpi detail="Revenue per planned FTE" icon={<Users size={17} />} label="Productivity" value={`$${Math.round(model.productivity)}K`} />
+              <DemoKpi detail="Actuals plus latest estimate" icon={<CircleDollarSign size={17} />} label="FY net revenue" value={formatMillions(model.totals.revenue)} />
+              <DemoKpi detail={`${formatMillions(model.totals.ebitda - savedModel.totals.ebitda, true)} vs submitted`} icon={<Activity size={17} />} label="EBITDA" tone={model.totals.margin >= 14 ? "positive" : "warning"} value={formatMillions(model.totals.ebitda)} />
+              <DemoKpi detail="After modeled delivery costs" icon={<GitCompareArrows size={17} />} label="EBITDA margin" tone={model.totals.margin >= 14 ? "positive" : "warning"} value={`${model.totals.margin.toFixed(1)}%`} />
+              <DemoKpi detail="Revenue per year-end FTE" icon={<Users size={17} />} label="Productivity" value={`$${Math.round(model.totals.productivity)}K`} />
             </div>
 
-            <div className="demo-grid forecast-workspace-grid">
-              <section className="demo-panel driver-panel">
-                <div className="panel-heading"><div><span>Assumptions</span><h3>Scenario drivers</h3></div><small>5 connected assumptions</small></div>
-                <div className="forecast-driver-list">
-                  {driverConfig.map((driver) => (
-                    <label className="driver-range-row" key={driver.key}>
-                      <span><strong>{driver.label}</strong><small>{driver.description}</small></span>
-                      <output>{formatDriverValue(drivers[driver.key], driver.suffix)}</output>
-                      <input
-                        aria-label={driver.label}
-                        max={driver.max}
-                        min={driver.min}
-                        onChange={(event) => updateDriver(driver.key, Number(event.target.value))}
-                        step={driver.step}
-                        type="range"
-                        value={drivers[driver.key]}
-                      />
-                      <span className="range-bounds"><small>{formatDriverValue(driver.min, driver.suffix)}</small><small>{formatDriverValue(driver.max, driver.suffix)}</small></span>
-                    </label>
-                  ))}
-                </div>
-                <div className="forecast-action-row">
-                  <button className="button button-secondary" disabled={!dirty} onClick={discardDraft} type="button"><RefreshCw aria-hidden="true" size={15} /> Discard</button>
-                  <button className="button button-primary" disabled={!dirty} onClick={() => setReviewOpen(true)} type="button"><Save aria-hidden="true" size={15} /> Review changes</button>
-                </div>
-              </section>
+            {view === "Scenario" ? (
+              <div className="forecast-workspace-grid">
+                <section className="demo-panel driver-panel">
+                  <div className="panel-heading"><div><span>Assumptions</span><h3>Connected business drivers</h3></div><small>Changes recalculate all months</small></div>
+                  <div className="forecast-driver-list">{configs.map((config) => <label className="driver-range-row" key={config.key}><span><strong>{config.label}</strong><small>{config.detail}</small></span><output>{driverValue(drivers[config.key], config.suffix)}</output><input aria-label={config.label} max={config.max} min={config.min} onChange={(event) => changeDriver(config.key, Number(event.target.value))} step={config.step} type="range" value={drivers[config.key]} /></label>)}</div>
+                </section>
 
-              <section className="demo-panel chart-panel forecast-chart-panel">
-                <div className="panel-heading"><div><span>Integrated outlook</span><h3>Actual + forecast revenue</h3></div><small>USD millions</small></div>
-                <div className="chart-wrap" aria-label="Actual and forecast monthly net revenue">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={model.chartData} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-                      <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "var(--muted)", fontSize: 11 }} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--muted)", fontSize: 11 }} />
-                      <Tooltip contentStyle={{ borderRadius: 4, borderColor: "var(--border)", fontSize: 12 }} />
-                      <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
-                      <Area dataKey="Forecast" fill="var(--chart-secondary-soft)" stroke="var(--chart-secondary)" strokeWidth={2} type="monotone" />
-                      <Line dataKey="Actual" dot={{ r: 3 }} stroke="var(--accent)" strokeWidth={2.5} type="monotone" />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="forecast-cost-strip">
-                  <div><span>Personnel</span><strong>{formatMillions(model.personnelCost)}</strong></div>
-                  <div><span>Contractors</span><strong>{formatMillions(model.contractorCost)}</strong></div>
-                  <div><span>Indirect</span><strong>{formatMillions(model.indirectCost)}</strong></div>
-                </div>
-              </section>
-            </div>
-
-            <section className="demo-panel forecast-lines-panel">
-              <div className="panel-heading"><div><span>Connected model</span><h3>Financial impact by planning line</h3></div><small>Draft compared with saved version</small></div>
-              <div className="demo-table-scroll">
-                <table className="demo-table">
-                  <thead><tr><th>Planning line</th><th>Owner</th><th>Saved</th><th>Draft</th><th>Impact</th><th>Status</th></tr></thead>
-                  <tbody>
-                    {[
-                      { label: "Net revenue", owner: "Regional FP&A", saved: savedModel.revenue, draft: model.revenue },
-                      { label: "Personnel costs", owner: "Finance Ops", saved: savedModel.personnelCost, draft: model.personnelCost },
-                      { label: "Contractor costs", owner: "Procurement Finance", saved: savedModel.contractorCost, draft: model.contractorCost },
-                      { label: "EBITDA", owner: "Global Planning", saved: savedModel.ebitda, draft: model.ebitda },
-                    ].map((line) => {
-                      const impact = line.draft - line.saved;
-                      return <tr key={line.label}><th>{line.label}</th><td>{line.owner}</td><td>{formatMillions(line.saved)}</td><td>{formatMillions(line.draft)}</td><td className={impact >= 0 ? "positive" : "negative"}>{formatMillions(impact, true)}</td><td><span className="table-status">{impact === 0 ? "Unchanged" : "Modeled"}</span></td></tr>;
-                    })}
-                  </tbody>
-                </table>
+                <section className="demo-panel forecast-chart-panel">
+                  <div className="panel-heading"><div><span>Integrated model</span><h3>Demand, capacity and EBITDA</h3></div><small>Jul–Dec reacts to every driver</small></div>
+                  <div className="chart-wrap chart-tall"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={model.months} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}><CartesianGrid stroke="var(--chart-grid)" strokeDasharray="3 3" vertical={false} /><XAxis axisLine={false} dataKey="month" tickLine={false} /><YAxis axisLine={false} tickLine={false} /><Tooltip contentStyle={{ borderRadius: 4, borderColor: "var(--border)" }} /><Legend iconType="circle" /><ReferenceLine stroke="var(--border-strong)" x="Jul" /><Bar dataKey="ebitda" fill="var(--accent-soft)" name="EBITDA" /><Line dataKey="demand" dot={false} name="Demand" stroke="var(--chart-secondary)" strokeWidth={2} /><Line dataKey="capacityRevenue" dot={false} name="Capacity" stroke="var(--accent)" strokeWidth={2} /></ComposedChart></ResponsiveContainer></div>
+                  <div className="guardrail-list">{model.guardrails.map((item) => <div key={item.id}><span className={item.pass ? "guard-pass" : "guard-fail"}>{item.pass ? <Check size={14} /> : "!"}</span><span><strong>{item.label}</strong><small>{item.value}</small></span></div>)}</div>
+                </section>
               </div>
-            </section>
-
-            {reviewOpen && (
-              <section className="demo-panel review-workspace" aria-live="polite">
-                <div className="panel-heading"><div><span>Review gate</span><h3>Confirm the forecast version</h3></div><strong className={totalEbitdaImpact >= 0 ? "positive" : "negative"}>{formatMillions(totalEbitdaImpact, true)} EBITDA</strong></div>
-                <div className="review-layout">
-                  <div className="review-change-list">
-                    {changes.map((change) => (
-                      <div key={change.key}><span><strong>{change.label}</strong><small>{formatDriverValue(change.previous, change.unit)} → {formatDriverValue(change.current, change.unit)}</small></span><strong className={change.ebitdaImpact >= 0 ? "positive" : "negative"}>{formatMillions(change.ebitdaImpact, true)}</strong></div>
-                    ))}
-                  </div>
-                  <label className="review-reason">
-                    <span>Why is this version changing?</span>
-                    <textarea maxLength={220} onChange={(event) => setReason(event.target.value)} placeholder="Record the business rationale for reviewers..." rows={4} value={reason} />
-                    <small>{reason.trim().length < 12 ? "Add at least 12 characters to preserve a useful audit trail." : `${reason.length}/220 characters`}</small>
-                  </label>
-                </div>
-                <div className="forecast-action-row review-actions">
-                  <button className="button button-secondary" onClick={() => setReviewOpen(false)} type="button">Back to model</button>
-                  <button className="button button-primary" disabled={reason.trim().length < 12} onClick={saveVersion} type="button"><Check aria-hidden="true" size={15} /> Save governed version</button>
-                </div>
-              </section>
+            ) : (
+              <section className="demo-panel monthly-plan-panel"><div className="panel-heading"><div><span>Calculation output</span><h3>Monthly integrated plan</h3></div><small>Actual Jan–Jun · forecast Jul–Dec</small></div><div className="demo-table-scroll"><table className="demo-table"><thead><tr><th>Month</th><th>Type</th><th>Headcount</th><th>Revenue</th><th>Employee cost</th><th>Contractors</th><th>Indirect cost</th><th>EBITDA</th></tr></thead><tbody>{model.months.map((month, index) => <tr key={month.month}><th>{month.month}</th><td><StatusPill label={index < 6 ? "Actual" : "Forecast"} tone={index < 6 ? "neutral" : "info"} /></td><td>{month.headcount}</td><td>{formatMillions(month.revenue)}</td><td>{formatMillions(month.employeeCost)}</td><td>{formatMillions(month.contractorCost)}</td><td>{formatMillions(month.indirectCost)}</td><td className={month.ebitda >= 0 ? "positive" : "negative"}>{formatMillions(month.ebitda)}</td></tr>)}</tbody></table></div></section>
             )}
+
+            <div className="sticky-workflow-bar"><div><SlidersHorizontal size={16} /><span><strong>{changes.length} driver changes</strong><small>{allGuardrailsPass ? "Ready for review" : "Guardrail exceptions will be highlighted"}</small></span></div><div><button className="button button-secondary" disabled={!changes.length} onClick={discard} type="button"><RefreshCw size={15} /> Discard</button><button className="button button-primary" disabled={!changes.length} onClick={() => setReviewOpen(true)} type="button"><Send size={15} /> Submit for review</button></div></div>
           </>
         )}
       </div>
+
+      <ConfirmDialog confirmDisabled={rationale.trim().length < 12 || !recipients} confirmLabel="Submit version" icon={<Send size={18} />} onCancel={() => setReviewOpen(false)} onConfirm={submitReview} open={reviewOpen} title="Submit forecast for review">
+        <div className="review-impact"><div><span>Driver changes</span><strong>{changes.length}</strong></div><div><span>EBITDA impact</span><strong>{formatMillions(model.totals.ebitda - savedModel.totals.ebitda, true)}</strong></div><div><span>Guardrails</span><strong>{model.guardrails.filter((item) => item.pass).length}/{model.guardrails.length} passed</strong></div></div>
+        <label className="field-label"><span>Review group</span><input onChange={(event) => setRecipients(event.target.value)} value={recipients} /></label>
+        <label className="field-label"><span>Rationale</span><textarea onChange={(event) => setRationale(event.target.value)} placeholder="Explain the business rationale and decision requested..." rows={4} value={rationale} /></label>
+      </ConfirmDialog>
     </div>
   );
 }

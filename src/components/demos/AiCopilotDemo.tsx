@@ -1,205 +1,121 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  AlertTriangle,
-  BookOpenCheck,
-  BrainCircuit,
-  Check,
-  CheckCircle2,
-  FileSearch,
-  LoaderCircle,
-  MessageSquareText,
-  Play,
-  RefreshCw,
-  ShieldCheck,
-  X,
-} from "lucide-react";
-import {
-  copilotVariances,
-  getCopilotOutput,
-  type CopilotEvidenceScenario,
-  type CopilotMode,
-  type CopilotVarianceId,
-} from "../../cases/aiDemoModels";
-import { DemoKpi, formatMillions, ProductName, SyntheticDemoNotice } from "./DemoShared";
+import { useMemo, useState } from "react";
+import { AlertTriangle, BookOpenCheck, BrainCircuit, Check, FileCheck2, Link2, RefreshCw, Send, ShieldCheck } from "lucide-react";
+import { evaluateCopilot, getCopilotCase, type CopilotClaim, type CopilotMode, type CopilotScenario } from "../../domain/portfolioModels";
+import { AuditTimeline, ConfirmDialog, type AuditEvent, useSessionState, useToast } from "../interaction/InteractionSystem";
+import { DemoKpi, DemoStatusBar, ProductName, StatusPill, SyntheticDemoNotice } from "./DemoShared";
 
-type CopilotView = "Review" | "Evaluation";
-type GenerationState = "ready" | "running";
-
-const scenarioLabels: Record<CopilotEvidenceScenario, string> = {
-  complete: "Complete evidence",
-  stale: "Stale source",
-  "missing-owner": "Missing owner input",
-};
+const scenarioLabels: Record<CopilotScenario, string> = { complete: "Complete evidence", stale: "Stale owner input", "missing-owner": "Missing owner input", conflicting: "Conflicting sources" };
+const modes: CopilotMode[] = ["CFO Brief", "Regional Review", "Email Summary"];
+type GenerationStage = "idle" | "retrieving" | "drafting" | "checking" | "ready";
+const pause = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 
 export function AiCopilotDemo() {
-  const [view, setView] = useState<CopilotView>("Review");
-  const [scenario, setScenario] = useState<CopilotEvidenceScenario>("complete");
+  const [scenario, setScenario] = useState<CopilotScenario>("complete");
   const [mode, setMode] = useState<CopilotMode>("CFO Brief");
-  const [varianceId, setVarianceId] = useState<CopilotVarianceId>("revenue");
-  const [selectedEvidenceId, setSelectedEvidenceId] = useState("E-101");
-  const [generationState, setGenerationState] = useState<GenerationState>("ready");
-  const [decision, setDecision] = useState("Awaiting finance review");
-  const timerRef = useRef<number | null>(null);
+  const [stage, setStage] = useState<GenerationStage>("idle");
+  const [claims, setClaims] = useState<CopilotClaim[]>(() => getCopilotCase("complete", "CFO Brief").claims);
+  const [resolved, setResolved] = useState(false);
+  const [selectedEvidenceId, setSelectedEvidenceId] = useState("E-401");
+  const [approveOpen, setApproveOpen] = useState(false);
+  const [recipients, setRecipients] = useState("CFO Staff and Regional Finance Directors");
+  const [events, setEvents] = useSessionState<AuditEvent[]>("portfolio-v4-copilot-audit", []);
+  const { pushToast } = useToast();
 
-  const output = useMemo(() => getCopilotOutput(varianceId, scenario, mode), [varianceId, scenario, mode]);
-  const selectedEvidence = output.evidence.find((item) => item.id === selectedEvidenceId) ?? output.evidence[0];
+  const sourceCase = useMemo(() => getCopilotCase(scenario, mode), [mode, scenario]);
+  const evidence = useMemo(() => sourceCase.evidence.map((item) => resolved && item.status !== "Ready" ? { ...item, value: item.id === "E-403" ? 0.8 : item.value, detail: `${item.detail} · reviewer resolution attached`, refreshed: "Just now", status: "Ready" as const } : item), [resolved, sourceCase.evidence]);
+  const evaluation = useMemo(() => evaluateCopilot(claims, evidence), [claims, evidence]);
+  const selectedEvidence = evidence.find((item) => item.id === selectedEvidenceId) ?? evidence[0];
+  const generated = stage === "ready";
 
-  useEffect(() => {
-    setSelectedEvidenceId(output.evidence[0].id);
-    setDecision("Awaiting finance review");
-  }, [output.evidence]);
-
-  useEffect(() => () => {
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-  }, []);
-
-  function generateCommentary() {
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-    setGenerationState("running");
-    setDecision("Evaluating claims and citations...");
-    timerRef.current = window.setTimeout(() => {
-      setGenerationState("ready");
-      setDecision(output.approvalReady ? "Ready for finance review" : "Evidence gate requires attention");
-    }, 950);
+  function reset(nextScenario = scenario, nextMode = mode) {
+    const next = getCopilotCase(nextScenario, nextMode);
+    setClaims(next.claims);
+    setResolved(false);
+    setStage("idle");
   }
 
-  function changeScenario(next: CopilotEvidenceScenario) {
-    setScenario(next);
-    setDecision("Scenario loaded · regenerate before approval");
+  async function generate() {
+    setStage("retrieving");
+    await pause(420);
+    setStage("drafting");
+    await pause(480);
+    setStage("checking");
+    await pause(520);
+    setStage("ready");
+    pushToast({ title: "Draft and control checks complete", detail: evaluation.approvalReady ? "Every material claim is grounded and numerically consistent." : "The draft is held until the evidence exception is resolved.", tone: evaluation.approvalReady ? "success" : "warning" });
+  }
+
+  function resolveEvidence() {
+    setResolved(true);
+    setStage("idle");
+    setEvents((current) => [{ id: Date.now(), title: "Evidence exception resolved", detail: `${scenarioLabels[scenario]} reviewed; source status and resolution note retained.`, tone: "complete" as const }, ...current].slice(0, 6));
+    pushToast({ title: "Evidence resolution attached", detail: "Regenerate the brief to run all control checks again.", tone: "info" });
+  }
+
+  function editClaim(id: string, text: string) {
+    setClaims((current) => current.map((claim) => claim.id === id ? { ...claim, text } : claim));
+    setStage("idle");
+  }
+
+  function approve() {
+    const event: AuditEvent = { id: Date.now(), title: `${mode} approved and distributed`, detail: `${claims.length} claims with ${evidence.length} evidence objects sent to ${recipients}.`, tone: "complete" };
+    setEvents((current) => [event, ...current].slice(0, 6));
+    setApproveOpen(false);
+    pushToast({ title: "Executive brief distributed", detail: `${recipients} received the approved simulated narrative.` });
   }
 
   return (
-    <div className="product-demo ai-copilot-demo">
-      <div className="demo-toolbar">
-        <ProductName icon={BrainCircuit} name="Asteron Variance AI" subtitle="Governed commentary copilot" />
-        <div className="demo-toolbar-controls">
-          <label className="select-control">
-            <span>Evidence scenario</span>
-            <select value={scenario} onChange={(event) => changeScenario(event.target.value as CopilotEvidenceScenario)}>
-              {(Object.keys(scenarioLabels) as CopilotEvidenceScenario[]).map((option) => (
-                <option key={option} value={option}>{scenarioLabels[option]}</option>
-              ))}
-            </select>
-          </label>
-          <div className="segmented-control" aria-label="Commentary audience">
-            {(["CFO Brief", "Regional Review"] as CopilotMode[]).map((option) => (
-              <button className={mode === option ? "active" : ""} key={option} onClick={() => setMode(option)} type="button">{option}</button>
-            ))}
-          </div>
-          <button className="button button-primary" disabled={generationState === "running"} onClick={generateCommentary} type="button">
-            {generationState === "running" ? <LoaderCircle className="spin" aria-hidden="true" size={15} /> : <Play aria-hidden="true" size={15} />}
-            {generationState === "running" ? "Evaluating" : "Generate brief"}
-          </button>
-          <SyntheticDemoNotice />
-        </div>
+    <div className="product-demo copilot-demo">
+      <div className="demo-toolbar copilot-toolbar">
+        <ProductName icon={BrainCircuit} name="FinSight Evidence Copilot" subtitle="Controlled finance narrative" />
+        <div className="demo-toolbar-controls"><div className="segmented-control">{modes.map((item) => <button className={mode === item ? "active" : ""} key={item} onClick={() => { setMode(item); reset(scenario, item); }} type="button">{item}</button>)}</div><SyntheticDemoNotice /></div>
       </div>
 
-      <div className="demo-content">
-        {!output.approvalReady && (
-          <div className="incident-banner" role="alert">
-            <div><AlertTriangle aria-hidden="true" size={20} /><span><strong>Publication gate is closed</strong><small>{output.issues[0]}</small></span></div>
-            <button className="button button-secondary" onClick={() => setView("Evaluation")} type="button">Review evaluation</button>
-          </div>
-        )}
+      <div className="demo-content copilot-workbench">
+        <DemoStatusBar records="5 governed evidence objects · 4 draft claims"><strong>June performance review</strong> · Retrieval scope: approved finance sources only</DemoStatusBar>
+
+        <div className="copilot-command-bar">
+          <label><span>Evidence condition</span><select onChange={(event) => { const next = event.target.value as CopilotScenario; setScenario(next); reset(next, mode); }} value={scenario}>{(Object.keys(scenarioLabels) as CopilotScenario[]).map((item) => <option key={item} value={item}>{scenarioLabels[item]}</option>)}</select></label>
+          <div className="generation-progress">{(["retrieving", "drafting", "checking"] as GenerationStage[]).map((item, index) => <span className={stage === item || (["drafting", "checking", "ready"].includes(stage) && index === 0) || (["checking", "ready"].includes(stage) && index === 1) || stage === "ready" && index === 2 ? "complete" : ""} key={item}>{index + 1}<small>{item === "retrieving" ? "Retrieve" : item === "drafting" ? "Draft" : "Validate"}</small></span>)}</div>
+          <button className="button button-primary" disabled={["retrieving", "drafting", "checking"].includes(stage)} onClick={generate} type="button"><RefreshCw className={["retrieving", "drafting", "checking"].includes(stage) ? "spin" : ""} size={15} /> {stage === "idle" ? "Generate controlled brief" : generated ? "Regenerate brief" : "Working..."}</button>
+        </div>
 
         <div className="demo-kpi-grid">
-          <DemoKpi detail="Claims supported by approved evidence" icon={<ShieldCheck size={17} />} label="Groundedness" tone={output.groundedness >= 95 ? "positive" : "warning"} value={`${output.groundedness}%`} />
-          <DemoKpi detail="Claim-level source references" icon={<FileSearch size={17} />} label="Citation coverage" tone={output.citationCoverage === 100 ? "positive" : "warning"} value={`${output.citationCoverage}%`} />
-          <DemoKpi detail="Finance remains accountable" icon={<CheckCircle2 size={17} />} label="Approval state" tone={output.approvalReady ? "positive" : "warning"} value={output.approvalReady ? "Review ready" : "Blocked"} />
-          <DemoKpi detail="Schema-constrained response" icon={<BrainCircuit size={17} />} label="Model output" value="5 fields" />
+          <DemoKpi detail="Target ≥ 95%" icon={<ShieldCheck size={17} />} label="Groundedness" tone={evaluation.scores[0].score >= 95 ? "positive" : "warning"} value={`${evaluation.scores[0].score}%`} />
+          <DemoKpi detail="Every claim has source IDs" icon={<Link2 size={17} />} label="Citation coverage" tone={evaluation.scores[1].score === 100 ? "positive" : "warning"} value={`${evaluation.scores[1].score.toFixed(0)}%`} />
+          <DemoKpi detail="Amounts checked to sources" icon={<FileCheck2 size={17} />} label="Numerical consistency" tone={evaluation.scores[2].score === 100 ? "positive" : "warning"} value={`${evaluation.scores[2].score}%`} />
+          <DemoKpi detail={evaluation.approvalReady ? "All controls passed" : "Human resolution required"} icon={evaluation.approvalReady ? <Check size={17} /> : <AlertTriangle size={17} />} label="Approval gate" tone={evaluation.approvalReady ? "positive" : "warning"} value={evaluation.approvalReady ? "Ready" : "Held"} />
         </div>
 
-        <div className="pipeline-tabs ai-view-tabs" role="tablist" aria-label="Copilot views">
-          {(["Review", "Evaluation"] as CopilotView[]).map((tab) => (
-            <button aria-selected={view === tab} className={view === tab ? "active" : ""} key={tab} onClick={() => setView(tab)} role="tab" type="button">{tab}</button>
-          ))}
+        <div className="copilot-main-grid">
+          <section className="demo-panel evidence-library">
+            <div className="panel-heading"><div><span>Retrieval</span><h3>Evidence library</h3></div><small>Click a source to inspect</small></div>
+            <div className="evidence-list">{evidence.map((item) => <button className={selectedEvidence.id === item.id ? "active" : ""} key={item.id} onClick={() => setSelectedEvidenceId(item.id)} type="button"><span><code>{item.id}</code><StatusPill label={item.status} tone={item.status === "Ready" ? "positive" : "danger"} /></span><strong>{item.source}</strong><small>{item.detail}</small></button>)}</div>
+            <article className="evidence-inspector"><span>Selected source</span><h4>{selectedEvidence.id} · {selectedEvidence.source}</h4><dl><div><dt>Financial value</dt><dd>${selectedEvidence.value.toFixed(1)}M</dd></div><div><dt>Refreshed</dt><dd>{selectedEvidence.refreshed}</dd></div><div><dt>Status</dt><dd>{selectedEvidence.status}</dd></div></dl></article>
+            {evaluation.invalidEvidence.length > 0 && !resolved && <button className="button button-secondary evidence-resolve" onClick={resolveEvidence} type="button"><BookOpenCheck size={15} /> Review and resolve evidence gap</button>}
+          </section>
+
+          <section className="demo-panel controlled-brief">
+            <div className="panel-heading"><div><span>Generated output</span><h3>{mode}</h3></div><StatusPill label={generated ? evaluation.approvalReady ? "Validated" : "Held" : "Draft not validated"} tone={generated && evaluation.approvalReady ? "positive" : "warning"} /></div>
+            <div className={`brief-document ${generated ? "brief-generated" : ""}`}>
+              <header><span>NORTHLINE · FINANCE LEADERSHIP</span><strong>June operating performance</strong><small>Controlled draft · citations open underlying evidence</small></header>
+              {claims.map((claim) => <div className="claim-row" key={claim.id}><span>{claim.id}</span><textarea aria-label={`Edit ${claim.id}`} onChange={(event) => editClaim(claim.id, event.target.value)} rows={2} value={claim.text} /><div>{claim.evidenceIds.map((id) => <button key={id} onClick={() => setSelectedEvidenceId(id)} type="button">[{id}]</button>)}</div></div>)}
+              <div className="decision-callout"><span>Decision prompt</span><p>{sourceCase.action}</p></div>
+            </div>
+            {!evaluation.approvalReady && <div className="validation-hold"><AlertTriangle size={17} /><span><strong>Distribution is blocked.</strong><small>{evaluation.invalidEvidence.length ? `${evaluation.invalidEvidence.length} evidence exception requires review.` : `${evaluation.numericFailures.length} numerical claim requires correction.`}</small></span></div>}
+            <div className="panel-actions"><button className="button button-secondary" onClick={() => reset()} type="button"><RefreshCw size={15} /> Reset draft</button><button className="button button-primary" disabled={!generated || !evaluation.approvalReady} onClick={() => setApproveOpen(true)} type="button"><Send size={15} /> Approve & distribute</button></div>
+          </section>
         </div>
 
-        {view === "Review" ? (
-          <section className="ai-copilot-grid" role="tabpanel">
-            <aside className="demo-panel ai-variance-panel">
-              <div className="panel-heading"><div><span>Materiality queue</span><h3>Variance topics</h3></div><small>USD millions</small></div>
-              <div className="ai-variance-list">
-                {copilotVariances.map((item) => (
-                  <button className={varianceId === item.id ? "active" : ""} key={item.id} onClick={() => setVarianceId(item.id)} type="button">
-                    <span><strong>{item.label}</strong><small>{item.owner}</small></span>
-                    <span className={item.variance >= 0 ? "positive" : "negative"}>{formatMillions(item.variance, true)}<small>{item.materiality}</small></span>
-                  </button>
-                ))}
-              </div>
-            </aside>
-
-            <article className="demo-panel ai-commentary-panel">
-              <div className="panel-heading"><div><span>Generated output</span><h3>{mode}</h3></div><small>Prompt v3.4 · finance schema</small></div>
-              <div className={`ai-generation-state ${generationState === "running" ? "running" : ""}`}>
-                {generationState === "running" ? <LoaderCircle className="spin" size={18} /> : <MessageSquareText size={18} />}
-                <p>{generationState === "running" ? "Retrieving approved evidence and evaluating each claim..." : output.headline}</p>
-              </div>
-              <div className="ai-claim-list">
-                <span className="ai-section-label">Cited claims</span>
-                {output.claims.map((claim, index) => (
-                  <article key={claim.text}>
-                    <span>{index + 1}</span>
-                    <p>{claim.text}</p>
-                    <div>{claim.evidenceIds.map((evidenceId) => <button key={evidenceId} onClick={() => setSelectedEvidenceId(evidenceId)} type="button">{evidenceId}</button>)}</div>
-                  </article>
-                ))}
-              </div>
-              <div className="ai-action-block"><strong>Recommended follow-up</strong><p>{output.action}</p></div>
-              <div className="ai-review-actions">
-                <span aria-live="polite">{decision}</span>
-                <div>
-                  <button className="icon-action reject" aria-label="Reject commentary" title="Reject commentary" onClick={() => setDecision("Rejected · analyst revision requested")} type="button"><X size={16} /></button>
-                  <button className="button button-secondary" onClick={() => setDecision("Additional owner evidence requested")} type="button"><RefreshCw size={15} /> Request evidence</button>
-                  <button className="button button-primary" disabled={!output.approvalReady || generationState === "running"} onClick={() => setDecision("Approved by Finance · ready to publish")} type="button"><Check size={15} /> Approve</button>
-                </div>
-              </div>
-            </article>
-
-            <aside className="demo-panel ai-evidence-panel">
-              <div className="panel-heading"><div><span>Evidence graph</span><h3>Source package</h3></div><small>{output.evidence.length} records</small></div>
-              <div className="ai-evidence-list">
-                {output.evidence.map((item) => (
-                  <button className={`${selectedEvidence.id === item.id ? "active" : ""} status-${item.status.toLowerCase()}`} key={item.id} onClick={() => setSelectedEvidenceId(item.id)} type="button">
-                    <span><strong>{item.id}</strong><small>{item.source}</small></span>
-                    <span>{item.status === "Ready" ? <Check size={14} /> : <AlertTriangle size={14} />}{item.status}</span>
-                  </button>
-                ))}
-              </div>
-              <div className="ai-evidence-detail">
-                <span>Selected evidence</span><strong>{selectedEvidence.source}</strong><p>{selectedEvidence.detail}</p>
-                <dl><div><dt>Reference</dt><dd>{selectedEvidence.id}</dd></div><div><dt>Refreshed</dt><dd>{selectedEvidence.refreshed}</dd></div><div><dt>Control state</dt><dd>{selectedEvidence.status}</dd></div></dl>
-              </div>
-            </aside>
-          </section>
-        ) : (
-          <section className="ai-evaluation-grid" role="tabpanel">
-            <article className="demo-panel">
-              <div className="panel-heading"><div><span>Quality gate</span><h3>Automated evaluation</h3></div><small>Minimum thresholds before review</small></div>
-              <div className="demo-table-scroll">
-                <table className="demo-table ai-evaluation-table">
-                  <thead><tr><th>Metric</th><th>Score</th><th>Target</th><th>Result</th></tr></thead>
-                  <tbody>{output.evaluation.map((item) => (
-                    <tr key={item.metric}><th>{item.metric}</th><td>{item.score}%</td><td>{item.target}%</td><td><span className={`control-status ${item.status === "Pass" ? "control-passed" : "control-warning"}`}>{item.status === "Pass" && <Check size={13} />}{item.status}</span></td></tr>
-                  ))}</tbody>
-                </table>
-              </div>
-              {output.issues.length > 0 && <div className="ai-evaluation-issues"><AlertTriangle size={17} /><div><strong>Required remediation</strong>{output.issues.map((issue) => <p key={issue}>{issue}</p>)}</div></div>}
-            </article>
-            <aside className="demo-panel ai-registry-panel">
-              <div className="panel-heading"><div><span>AI registry</span><h3>Reproducible release</h3></div><BookOpenCheck size={18} /></div>
-              <dl>
-                <div><dt>Model endpoint</dt><dd>enterprise-llm-02</dd></div>
-                <div><dt>Prompt version</dt><dd>variance-brief-v3.4</dd></div>
-                <div><dt>Output contract</dt><dd>commentary-schema-v2</dd></div>
-                <div><dt>Retrieval policy</dt><dd>approved-finance-evidence</dd></div>
-                <div><dt>Human decision</dt><dd>Required before publish</dd></div>
-              </dl>
-              <div className="ai-policy-note"><ShieldCheck size={17} /><span><strong>Control principle</strong><small>Fluent output never overrides missing evidence.</small></span></div>
-            </aside>
-          </section>
-        )}
+        <section className="demo-panel scorecard-panel"><div className="panel-heading"><div><span>Evaluation harness</span><h3>Control scorecard</h3></div><small>Deterministic checks before human approval</small></div><div className="scorecard-grid">{evaluation.scores.map((score) => <div key={score.label}><span><strong>{score.label}</strong><small>Target {score.target}%</small></span><div><i style={{ width: `${Math.min(score.score, 100)}%` }} /></div><b className={score.score >= score.target ? "positive" : "negative"}>{score.score.toFixed(0)}%</b></div>)}</div></section>
+        <section className="demo-panel audit-panel"><div className="panel-heading"><div><span>Governance</span><h3>Approval history</h3></div><small>Current session</small></div><AuditTimeline events={events} /></section>
       </div>
+
+      <ConfirmDialog confirmDisabled={!recipients} confirmLabel="Approve and distribute" icon={<Send size={18} />} onCancel={() => setApproveOpen(false)} onConfirm={approve} open={approveOpen} title={`Approve ${mode}`}>
+        <div className="review-impact"><div><span>Claims</span><strong>{claims.length}</strong></div><div><span>Citations</span><strong>{claims.reduce((sum, claim) => sum + claim.evidenceIds.length, 0)}</strong></div><div><span>Controls</span><strong>5/5 passed</strong></div></div>
+        <label className="field-label"><span>Distribution group</span><input onChange={(event) => setRecipients(event.target.value)} value={recipients} /></label>
+        <div className="email-preview"><small>SUBJECT</small><strong>June performance · approved {mode.toLowerCase()}</strong><p>This message includes the validated executive brief and a governed evidence appendix.</p></div>
+      </ConfirmDialog>
     </div>
   );
 }

@@ -59,8 +59,8 @@ export function CasePage({ item }: { item: PortfolioCase }) {
         <div className="page-shell">
           <div className="demo-heading">
             <div>
-              <span className="eyebrow">Interactive product slice</span>
-              <h2>Explore the operating model</h2>
+              <span className="eyebrow">Working product</span>
+              <h2>Operate the model, not a screenshot.</h2>
             </div>
             <p>Client-side simulation · no external systems or employer data</p>
           </div>
